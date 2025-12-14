@@ -1,0 +1,167 @@
+#version 430
+
+layout (local_size_x = 128, local_size_y = 1, local_size_z = 1) in;
+
+// Uniforms
+
+uniform int particles_nb;
+uniform float deltaTime;
+uniform float gravity;
+uniform float collision_damping;
+uniform float target_density;
+uniform float influence_radius;
+uniform float pressure_multiplier;
+
+uniform float min_x;
+uniform float max_x;
+uniform float min_y;
+uniform float max_y;
+uniform float min_z;
+uniform float max_z;
+
+// Constants
+
+float PI = 3.14159;
+float mass = 1.0f;
+
+struct Particle {
+	vec3 position;
+	vec3 predicted_position;
+	vec3 velocity;
+	float density;
+	float pad;
+	float pad2;
+	float pad3;
+};
+
+float smoothingKernel(float radius, float dist);
+float calculateDensity(vec3 sample_point);
+vec3 calculatePressureForce(int i);
+float calculateSharedPressure(float densityA, float densityB);
+float convertDensityToPressure(float density);
+vec3 randomDirection();
+
+layout(std430, binding = 5) buffer SSBO {
+	Particle particles[];
+};
+
+void resolveCollisions() {
+	uint i = gl_GlobalInvocationID.x;
+
+	if (particles[i].position.x < min_x) {
+		particles[i].position.x = min_x;
+		particles[i].velocity.x *= -1 * collision_damping;
+	} else if (particles[i].position.x > max_x) {
+		particles[i].position.x = max_x;
+		particles[i].velocity.x *= -1 * collision_damping;
+	};
+
+	if (particles[i].position.y < min_y) {
+		particles[i].position.y = min_y;
+		particles[i].velocity.y *= -1 * collision_damping;
+	} else if (particles[i].position.y > max_y) {
+		particles[i].position.y = max_y;
+		particles[i].velocity.y *= -1 * collision_damping;
+	};
+
+	if (particles[i].position.z < min_z) {
+		particles[i].position.z = min_z;
+		particles[i].velocity.z *= -1 * collision_damping;
+	} else if (particles[i].position.z > max_z) {
+		particles[i].position.z = max_z;
+		particles[i].velocity.z *= -1 * collision_damping;
+	};
+};
+
+float smoothingKernel(float radius, float dist) { //ok
+	if (dist >= radius) {
+		return 0;
+	}
+	float volume = PI * pow(radius, 4) / 6;
+	float value = dist - radius;
+	return value * value / volume;
+}
+
+float smoothingKernelDerivative(float radius, float dist) { //ok
+	if (dist >= radius) {
+		return 0;
+	}
+	float scale = 12 / (pow(radius, 4) * PI);
+	return scale * (dist - radius);
+}
+
+float calculateDensity(vec3 sample_point) {  //ok
+	float density = 0;
+	for (int i = 0; i < particles_nb; i++) {
+		float dist = distance(particles[i].predicted_position, sample_point);
+		float influence = smoothingKernel(influence_radius, dist);
+		density += mass * influence;
+	}
+	return density;
+}
+
+vec3 calculatePressureForce(int i) { //ok
+	vec3 pressure_force = vec3(0, 0, 0);
+	for (int other = 0; other < particles_nb; other++) {
+		if (other == i) {
+			continue;
+		}
+
+		vec3 offset = particles[other].predicted_position - particles[i].predicted_position;
+		float dist = length(offset);
+		vec3 direction = dist == 0 ? randomDirection() : offset / dist;
+		float slope = smoothingKernelDerivative(influence_radius, dist);
+		float densityA = particles[i].density;
+		float densityB = particles[other].density;
+		float shared_pressure = calculateSharedPressure(densityA, densityB);
+		pressure_force += direction * slope * shared_pressure * mass / densityA;
+	}
+	return pressure_force;
+}
+
+float calculateSharedPressure(float densityA, float densityB) { //ok
+	float pressureA = convertDensityToPressure(densityA);
+	float pressureB = convertDensityToPressure(densityB);
+	return (pressureA + pressureB) / 2;
+}
+
+float convertDensityToPressure(float density) { //ok
+	float density_error = density - target_density;
+	return density_error * pressure_multiplier;
+}
+
+vec3 randomDirection() { // ???
+	int seed = int(gl_GlobalInvocationID.x);
+	int x = ((9173733 * seed) << 5 + (62 * seed)) << 4;
+	int y = ((6573 * seed) << 4 + (13 * seed)) << 6;
+	int z = ((3197 * seed) << 3 + (71 * seed)) << 5;
+	return normalize(vec3(x, y, z));
+}
+
+
+
+// Executed once for each particle
+void main() {
+	int i = int(gl_GlobalInvocationID.x); // Since the local size in one-dimensional, we can get the unique invocation ID only from the x value
+	if (i >= particles_nb) {
+		return;
+	}
+
+	vec3 down = vec3(0, -1, 0);
+	particles[i].velocity += gravity * down * deltaTime;
+	particles[i].predicted_position = particles[i].position + particles[i].velocity / 12.0f;
+	memoryBarrierBuffer();
+	barrier();
+	particles[i].density = calculateDensity(particles[i].predicted_position);
+	memoryBarrierBuffer();
+	barrier();
+	vec3 pressure_force = calculatePressureForce(i);
+	vec3 pressure_acceleration = pressure_force / particles[i].density;
+	particles[i].velocity += pressure_acceleration * deltaTime;
+	memoryBarrierBuffer();
+	barrier();
+
+
+	particles[i].position += particles[i].velocity * deltaTime;
+	resolveCollisions();
+}
