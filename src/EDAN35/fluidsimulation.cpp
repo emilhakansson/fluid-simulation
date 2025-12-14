@@ -46,6 +46,9 @@ int grid_size_y = 25;
 int grid_size_z = 25;
 int particles_nb = grid_size_x * grid_size_y * grid_size_z;
 
+// Without further optimization, 40000 particles seems to be the limit of what my GPU can handle while retaining 60fps.
+int max_particle_count = 40000;
+
 float particle_influence_radius = 1.5f;
 float target_density = 1.0f;
 float pressure_multiplier = 750.0f;
@@ -59,49 +62,15 @@ float deltaTime;
 
 bool pause_animation = true;
 
-int work_groups_nb = ceil(particles_nb / 128.0f);
-
 const glm::vec3 down = glm::vec3(0.0f, -1.0f, 0.0f);
 
-std::vector<Particle> particles = std::vector<Particle>(particles_nb);
+std::vector<Particle> particles = std::vector<Particle>(max_particle_count);
 std::vector<glm::vec3> positions = std::vector<glm::vec3>(particles_nb);
 std::vector<glm::vec3> predicted_positions = std::vector<glm::vec3>(particles_nb);
 std::vector<glm::vec3> velocities = std::vector<glm::vec3>(particles_nb);
 std::vector<float> densities = std::vector<float>(particles_nb);
 std::vector<glm::vec3> pressure_forces = std::vector<glm::vec3>(particles_nb);
 edan35::NeighborhoodSearch neighborhood_search = edan35::NeighborhoodSearch::NeighborhoodSearch(predicted_positions, particle_influence_radius);
-
-/**
-struct Box {
-	glm::vec3 position;
-	float width, height, depth;
-	Node node;
-	bonobo::mesh_data shape = parametric_shapes::createBox(bounds_x, bounds_y, bounds_z);
-
-	Box(float width, float height, float depth, glm::vec3 position, GLuint& shader) {
-		this->width = width;
-		this->height = height;
-		this->depth = depth;
-		this->position = position;
-
-		bonobo::mesh_data shape = parametric_shapes::createBox(bounds_x, bounds_y, bounds_z);
-		node.set_geometry(shape);
-		node.set_program(&shader);
-	}
-
-	void update() {
-		shape = parametric_shapes::createBox(bounds_x, bounds_y, bounds_z);
-		node.set_geometry(shape);
-	}
-
-	void render(FPSCameraf camera) {
-		node.get_transform().SetTranslate(position);
-		glBindVertexArray(shape.vao);
-		glDrawElements(GL_LINES, sizeof(glm::vec2) * 12, GL_UNSIGNED_INT, nullptr);
-		glBindVertexArray(0);
-	}
-};
-*/
 
 static void setComputeUniforms(GLuint program) {
 	glUniform1i(glGetUniformLocation(program, "particles_nb"), particles_nb);
@@ -119,8 +88,44 @@ static void setComputeUniforms(GLuint program) {
 	glUniform1f(glGetUniformLocation(program, "pressure_multiplier"), pressure_multiplier);
 }
 
+static void initializeParticlePositions(int particles_nb)
+{
+	int grid_size = 1;
+	while (grid_size * grid_size * grid_size < particles_nb) {
+		grid_size++;
+	}
+	int idx = 0;
+	for (int i = 0; i < grid_size; i++) {
+		for (int j = 0; j < grid_size; j++) {
+			for (int k = 0; k < grid_size; k++) {
+				if (idx >= particles_nb) {
+					break;
+				}
+				float x = -grid_size_x / 2 + i;
+				float y = -grid_size_y / 2 + j;
+				float z = -grid_size_z / 2 + k;
+				glm::vec3 position = glm::vec3(x, y, z);
+				particles[idx].position = position;
+				particles[idx].predicted_position = position;
+				idx++;
+				
+			}
+		}
+	}
+}
+
+static void initializeParticles(int particles_nb, float gap) {
+	for (int i = 0; i < particles_nb; i++) {
+		particles[i] = Particle();
+	}
+	initializeParticlePositions(particles_nb);
+}
+
+
+
 void
 edan35::FluidSimulation::run() {
+	assert(particles_nb <= max_particle_count);
 	mCamera.mWorld.SetTranslate(glm::vec3(0.0f, 100.0f, 100.0f));
 	mCamera.mWorld.LookAt(glm::vec3(0.0f));
 	mCamera.mMouseSensitivity = glm::vec2(0.001f);
@@ -158,20 +163,7 @@ edan35::FluidSimulation::run() {
 	glm::vec3 initial_velocity = glm::vec3(0.0f, 0.0f, 0.0f);
 	float radius = 1.0f;
 
-	
-	int currentIndex = 0;
-	for (int i = 0; i < grid_size_x; i++) {
-		for (int j = 0; j < grid_size_y; j++) {
-			for (int k = 0; k < grid_size_z; k++) {
-				Particle p = Particle();
-				p.position = glm::vec3(i - grid_size_x / 2, j - grid_size_y / 2, k - grid_size_z / 2);
-				p.velocity = initial_velocity;
-				p.predicted_position = p.position;
-				particles[currentIndex] = p;
-				currentIndex++;
-			}
-		}
-	}
+	initializeParticles(particles_nb, 10.0f);
 
 	// Set up uniforms
 
@@ -205,17 +197,26 @@ edan35::FluidSimulation::run() {
 	glGenBuffers(1, &particle_ssbo);
 	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 5, particle_ssbo);
 	glBindBuffer(GL_SHADER_STORAGE_BUFFER, particle_ssbo);
-	glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(Particle) * particles_nb, particles.data(), GL_DYNAMIC_DRAW);
+	glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(Particle) * max_particle_count, particles.data(), GL_DYNAMIC_DRAW);
 
 	glEnable(GL_DEPTH_TEST);
 
 	auto lastTime = std::chrono::high_resolution_clock::now();
+	int particles_nb_prev = particles_nb;
 
 	while (!glfwWindowShouldClose(window)) {
 		auto nowTime = std::chrono::high_resolution_clock::now();
 		auto deltaTimeUs = std::chrono::duration_cast<std::chrono::microseconds>(nowTime - lastTime);
 		deltaTime = static_cast<float>(deltaTimeUs.count()) / 1000000.0f;
 		lastTime = nowTime;
+
+		// Since the shader storage buffer size must be static, we have to 
+		// check if the number of particles exceeds the max count. Then we 
+		// spawn work groups based on the number of particles.
+		bool particles_nb_changed = particles_nb != particles_nb_prev;
+		particles_nb_prev = particles_nb;
+		particles_nb = std::min(particles_nb, max_particle_count);
+		int work_groups_nb = ceil(particles_nb / 128.0f);
 
 		auto& io = ImGui::GetIO();
 		inputHandler.SetUICapture(io.WantCaptureMouse, io.WantCaptureKeyboard);
@@ -255,6 +256,10 @@ edan35::FluidSimulation::run() {
 				}
 				
 			}
+			if (particles_nb_changed) {
+				initializeParticlePositions(particles_nb);
+				glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(Particle) * max_particle_count, particles.data(), GL_DYNAMIC_DRAW);
+			}
 			particlenode.renderInstanced(particles_nb, mCamera.GetWorldToClipMatrix());
 		}
 
@@ -266,6 +271,7 @@ edan35::FluidSimulation::run() {
 
 			ImGui::Separator();
 
+			ImGui::SliderInt("Particle count", &particles_nb, 1, max_particle_count);
 			ImGui::SliderFloat("Particle scale", &particle_scale, 0.1f, 2.0f);
 			ImGui::SliderFloat("Influence radius", &particle_influence_radius, 0.1f, 3.0f);
 			ImGui::SliderFloat("Target density", &target_density, 0.1f, 3.0f);
@@ -286,7 +292,7 @@ edan35::FluidSimulation::run() {
 	
 }
 
-// TODO: ignore particles which are outside the influence radius
+
 float edan35::FluidSimulation::calculateDensity(glm::vec3 samplePoint) {
 	float density = 0.0f;
 	for (int i : neighborhood_search.getNeighborIndices(samplePoint)) {
