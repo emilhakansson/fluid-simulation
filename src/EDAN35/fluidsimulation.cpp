@@ -41,10 +41,7 @@ edan35::FluidSimulation::~FluidSimulation()
 float gravity = 9.80f;
 float mass = 1.0f;
 
-int grid_size_x = 55;
-int grid_size_y = 25;
-int grid_size_z = 25;
-int particles_nb = grid_size_x * grid_size_y * grid_size_z;
+int particles_nb = 30000;
 
 // Without further optimization, 40000 particles seems to be the limit of what my GPU can handle while retaining 60fps.
 int max_particle_count = 40000;
@@ -52,6 +49,7 @@ int max_particle_count = 40000;
 float particle_influence_radius = 1.5f;
 float target_density = 1.0f;
 float pressure_multiplier = 750.0f;
+float near_pressure_multiplier = 2.0f;
 float collision_dampening = 0.7f;
 
 float bounds_x = 80.0f;
@@ -86,6 +84,7 @@ static void setComputeUniforms(GLuint program) {
 	glUniform1f(glGetUniformLocation(program, "influence_radius"), particle_influence_radius);
 	glUniform1f(glGetUniformLocation(program, "target_density"), target_density);
 	glUniform1f(glGetUniformLocation(program, "pressure_multiplier"), pressure_multiplier);
+	glUniform1f(glGetUniformLocation(program, "near_pressure_multiplier"), near_pressure_multiplier);
 }
 
 static void initializeParticlePositions(int particles_nb)
@@ -101,9 +100,9 @@ static void initializeParticlePositions(int particles_nb)
 				if (idx >= particles_nb) {
 					break;
 				}
-				float x = -grid_size_x / 2 + i;
-				float y = -grid_size_y / 2 + j;
-				float z = -grid_size_z / 2 + k;
+				float x = -bounds_x / 2 + i;
+				float y = -bounds_y / 2 + j;
+				float z = -bounds_z / 2 + k;
 				glm::vec3 position = glm::vec3(x, y, z);
 				particles[idx].position = position;
 				particles[idx].predicted_position = position;
@@ -205,6 +204,8 @@ edan35::FluidSimulation::run() {
 	int particles_nb_prev = particles_nb;
 
 	while (!glfwWindowShouldClose(window)) {
+		
+
 		auto nowTime = std::chrono::high_resolution_clock::now();
 		auto deltaTimeUs = std::chrono::duration_cast<std::chrono::microseconds>(nowTime - lastTime);
 		deltaTime = static_cast<float>(deltaTimeUs.count()) / 1000000.0f;
@@ -276,12 +277,13 @@ edan35::FluidSimulation::run() {
 			ImGui::SliderFloat("Influence radius", &particle_influence_radius, 0.1f, 3.0f);
 			ImGui::SliderFloat("Target density", &target_density, 0.1f, 3.0f);
 			ImGui::SliderFloat("Pressure multiplier", &pressure_multiplier, 1.0f, 1000.0f);
+			ImGui::SliderFloat("Near pressure multiplier", &near_pressure_multiplier, 0.1f, 3.0f);
 			ImGui::SliderFloat("Gravity", &gravity, -20.0f, 20.0f);
 			ImGui::SliderFloat("Collision damping", &collision_dampening, 0.05f, 1.0f);
 			
 			ImGui::Separator();
 
-			ImGui::SliderFloat("Box width", &bounds_x, 10.0f, 100.0f);
+			ImGui::SliderFloat("Box width", &bounds_x, 10.0f, 150.0f);
 			ImGui::SliderFloat("Box height", &bounds_y, 10.0f, 100.0f);
 			ImGui::SliderFloat("Box depth", &bounds_z, 10.0f, 100.0f);
 		}

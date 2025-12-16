@@ -8,7 +8,7 @@ struct Particle {
 	glm::vec3 velocity;
 	float pad_2;
 	float density;
+	float near_density;
 	float pad_3;
 	float pad_4;
-	float pad_5;
 };

@@ -11,6 +11,7 @@ uniform float collision_damping;
 uniform float target_density;
 uniform float influence_radius;
 uniform float pressure_multiplier;
+uniform float near_pressure_multiplier;
 
 uniform float min_x;
 uniform float max_x;
@@ -21,24 +22,34 @@ uniform float max_z;
 
 // Constants
 
-float PI = 3.14159;
-float mass = 1.0f;
+const float mass = 1.0f;
+const float PI = 3.14159;
 
 struct Particle {
 	vec3 position;
 	vec3 predicted_position;
 	vec3 velocity;
 	float density;
-	float pad;
+	float near_density;
 	float pad2;
 	float pad3;
 };
 
 float smoothingKernel(float radius, float dist);
+float smoothingKernelDerivative(float radius, float dist);
+float nearDensityKernel(float radius, float dist);
+float nearDensityKernelDerivative(float radius, float dist);
+
 float calculateDensity(vec3 sample_point);
+float calculateNearDensity(vec3 sample_point);
+
 vec3 calculatePressureForce(int i);
+vec3 calculateNearPressureForce(int i);
+
 float calculateSharedPressure(float densityA, float densityB);
 float convertDensityToPressure(float density);
+float convertNearDensityToNearPressure(float near_density);
+
 vec3 randomDirection();
 
 layout(std430, binding = 5) buffer SSBO {
@@ -77,7 +88,7 @@ float smoothingKernel(float radius, float dist) { //ok
 	if (dist >= radius) {
 		return 0;
 	}
-	float volume = PI * pow(radius, 4) / 6;
+	float volume = 2 * PI * pow(radius, 5) / 15;
 	float value = dist - radius;
 	return value * value / volume;
 }
@@ -86,8 +97,26 @@ float smoothingKernelDerivative(float radius, float dist) { //ok
 	if (dist >= radius) {
 		return 0;
 	}
-	float scale = 12 / (pow(radius, 4) * PI);
-	return scale * (dist - radius);
+	float scale = 15 / (PI * pow(radius, 5));
+	return (dist - radius) * scale;
+}
+
+float nearDensityKernel(float radius, float dist) {
+	if (dist >= radius) {
+		return 0;
+	}
+	float volume = PI * pow(radius, 6) / 15;
+	float value = radius - dist;
+	return value * value * value / volume;
+}
+
+float nearDensityKernelDerivative(float radius, float dist) {
+	if (dist >= radius) {
+		return 0;
+	}
+	float value = radius - dist;
+	float scale = -45 / (PI * pow(radius, 6));
+	return value * value * scale;
 }
 
 float calculateDensity(vec3 sample_point) {  //ok
@@ -100,6 +129,16 @@ float calculateDensity(vec3 sample_point) {  //ok
 	return density;
 }
 
+float calculateNearDensity(vec3 sample_point) {
+	float near_density = 0;
+	for (int i = 0; i < particles_nb; i++) {
+		float dist = distance(particles[i].predicted_position, sample_point);
+		float influence = nearDensityKernel(influence_radius, dist);
+		near_density += mass * influence;
+	}
+	return near_density;
+}
+
 vec3 calculatePressureForce(int i) { //ok
 	vec3 pressure_force = vec3(0, 0, 0);
 	for (int other = 0; other < particles_nb; other++) {
@@ -110,11 +149,18 @@ vec3 calculatePressureForce(int i) { //ok
 		vec3 offset = particles[other].predicted_position - particles[i].predicted_position;
 		float dist = length(offset);
 		vec3 direction = dist == 0 ? randomDirection() : offset / dist;
+		direction += 0.0001 * randomDirection();
 		float slope = smoothingKernelDerivative(influence_radius, dist);
 		float densityA = particles[i].density;
+		float nearDensityA = particles[i].near_density;
 		float densityB = particles[other].density;
+		float nearDensityB = particles[other].near_density;
 		float shared_pressure = calculateSharedPressure(densityA, densityB);
-		pressure_force += direction * slope * shared_pressure * mass / densityA;
+		float nearPressureA = convertNearDensityToNearPressure(nearDensityA);
+		float nearPressureB = convertNearDensityToNearPressure(nearDensityB);
+		float shared_near_pressure = (nearPressureA + nearPressureB) / 2;
+		pressure_force += direction * slope * shared_pressure * mass / densityB;
+		pressure_force += direction * nearDensityKernelDerivative(influence_radius, dist) * shared_near_pressure / densityB;
 	}
 	return pressure_force;
 }
@@ -128,6 +174,10 @@ float calculateSharedPressure(float densityA, float densityB) { //ok
 float convertDensityToPressure(float density) { //ok
 	float density_error = density - target_density;
 	return density_error * pressure_multiplier;
+}
+
+float convertNearDensityToNearPressure(float near_density) {
+	return near_density * near_pressure_multiplier;
 }
 
 vec3 randomDirection() { // ???
@@ -153,6 +203,7 @@ void main() {
 	memoryBarrierBuffer();
 	barrier();
 	particles[i].density = calculateDensity(particles[i].predicted_position);
+	particles[i].near_density = calculateNearDensity(particles[i].predicted_position);
 	memoryBarrierBuffer();
 	barrier();
 	vec3 pressure_force = calculatePressureForce(i);
@@ -160,8 +211,6 @@ void main() {
 	particles[i].velocity += pressure_acceleration * deltaTime;
 	memoryBarrierBuffer();
 	barrier();
-
-
 	particles[i].position += particles[i].velocity * deltaTime;
 	resolveCollisions();
 }

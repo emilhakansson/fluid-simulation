@@ -5,9 +5,9 @@ struct Particle {
 	vec3 predicted_position;
 	vec3 velocity;
 	float density;
-	float pad;
+	float near_density;
+	float pad1;
 	float pad2;
-	float pad3;
 };
 
 layout (std430, binding = 5) buffer SSBO {
