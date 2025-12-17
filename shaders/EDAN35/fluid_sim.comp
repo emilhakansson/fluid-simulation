@@ -20,10 +20,13 @@ uniform float max_y;
 uniform float min_z;
 uniform float max_z;
 
+uniform mat4 world_to_local;
+
 // Constants
 
 const float mass = 1.0f;
 const float PI = 3.14159;
+const vec3 down = vec3(0, -1, 0);
 
 struct Particle {
 	vec3 position;
@@ -59,29 +62,37 @@ layout(std430, binding = 5) buffer SSBO {
 void resolveCollisions() {
 	uint i = gl_GlobalInvocationID.x;
 
-	if (particles[i].position.x < min_x) {
-		particles[i].position.x = min_x;
-		particles[i].velocity.x *= -1 * collision_damping;
-	} else if (particles[i].position.x > max_x) {
-		particles[i].position.x = max_x;
-		particles[i].velocity.x *= -1 * collision_damping;
+	vec3 local_pos = (world_to_local * vec4(particles[i].position, 1)).xyz;
+	vec3 local_vel = (world_to_local * vec4(particles[i].velocity, 0)).xyz;
+
+	if (local_pos.x < min_x) {
+		local_pos.x = min_x;
+		local_vel.x *= -1 * collision_damping;
+	} else if (local_pos.x > max_x) {
+		local_pos.x = max_x;
+		local_vel.x *= -1 * collision_damping;
 	};
 
-	if (particles[i].position.y < min_y) {
-		particles[i].position.y = min_y;
-		particles[i].velocity.y *= -1 * collision_damping;
-	} else if (particles[i].position.y > max_y) {
-		particles[i].position.y = max_y;
-		particles[i].velocity.y *= -1 * collision_damping;
+	if (local_pos.y < min_y) {
+		local_pos.y = min_y;
+		local_vel.y *= -1 * collision_damping;
+	} else if (local_pos.y > max_y) {
+		local_pos.y = max_y;
+		local_vel.y *= -1 * collision_damping;
 	};
 
-	if (particles[i].position.z < min_z) {
-		particles[i].position.z = min_z;
-		particles[i].velocity.z *= -1 * collision_damping;
-	} else if (particles[i].position.z > max_z) {
-		particles[i].position.z = max_z;
-		particles[i].velocity.z *= -1 * collision_damping;
+	if (local_pos.z < min_z) {
+		local_pos.z = min_z;
+		local_vel.z *= -1 * collision_damping;
+	} else if (local_pos.z > max_z) {
+		local_pos.z = max_z;
+		local_vel.z *= -1 * collision_damping;
 	};
+
+	vec3 pos = (inverse(world_to_local) * vec4(local_pos, 1)).xyz;
+	vec3 vel = (inverse(world_to_local) * vec4(local_vel, 0)).xyz;
+	particles[i].position = pos;
+	particles[i].velocity = vel;
 };
 
 float smoothingKernel(float radius, float dist) { //ok
@@ -199,7 +210,6 @@ void main() {
 		return;
 	}
 
-	vec3 down = vec3(0, -1, 0);
 	particles[i].velocity += gravity * down * deltaTime;
 	particles[i].predicted_position = particles[i].position + particles[i].velocity / 20.0f;
 	memoryBarrierBuffer();

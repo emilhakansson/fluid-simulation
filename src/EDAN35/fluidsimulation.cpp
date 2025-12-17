@@ -25,7 +25,7 @@ edan35::FluidSimulation::FluidSimulation(WindowManager& windowManager) :
 {
 	WindowManager::WindowDatum window_datum{ inputHandler, mCamera, config::resolution_x, config::resolution_y, 0, 0, 0, 0 };
 
-	window = mWindowManager.CreateGLFWWindow("EDAF80: Assignment 4", window_datum, config::msaa_rate);
+	window = mWindowManager.CreateGLFWWindow("EDAF80: Fluid simulation", window_datum, config::msaa_rate);
 	if (window == nullptr) {
 		throw std::runtime_error("Failed to get a window: aborting!");
 	}
@@ -56,6 +56,44 @@ float bounds_x = 80.0f;
 float bounds_y = 100.0f;
 float bounds_z = 40.0f;
 
+float rotation_x = 0.0f;
+float rotation_y = 0.0f;
+float rotation_z = 0.0f;
+
+static glm::mat4 getLocalMatrix() {
+	float radians_x = rotation_x * glm::pi<float>() / 180.0f;
+	float sin_x = glm::sin(radians_x);
+	float cos_x = glm::cos(radians_x);
+	glm::mat4 M_rot_x = glm::mat4(
+		glm::vec4(1,     0,      0, 0),
+		glm::vec4(0, cos_x, -sin_x, 0),
+		glm::vec4(0, sin_x,  cos_x, 0),
+		glm::vec4(0,     0,      0, 1)
+	);
+
+	float radians_y = rotation_y * glm::pi<float>() / 180.0f;
+	float sin_y = glm::sin(radians_y);
+	float cos_y = glm::cos(radians_y);
+	glm::mat4 M_rot_y = glm::mat4(
+		glm::vec4( cos_y, 0, sin_y, 0),
+		glm::vec4(     0, 1,     0, 0),
+		glm::vec4(-sin_y, 0, cos_y, 0),
+		glm::vec4(     0, 0,     0, 1)
+	);
+
+	float radians_z = rotation_z * glm::pi<float>() / 180.0f;
+	float sin_z = glm::sin(radians_z);
+	float cos_z = glm::cos(radians_z);
+	glm::mat4 M_rot_z = glm::mat4(
+		glm::vec4(cos_z, -sin_z, 0, 0),
+		glm::vec4(sin_z,  cos_z, 0, 0),
+		glm::vec4(    0,      0, 1, 0),
+		glm::vec4(    0,      0, 0, 1)
+	);
+
+	return M_rot_z * M_rot_y * M_rot_x;
+}
+
 float deltaTime;
 
 bool pause_animation = true;
@@ -72,17 +110,20 @@ edan35::NeighborhoodSearch neighborhood_search = edan35::NeighborhoodSearch::Nei
 
 static void setComputeUniforms(GLuint program) {
 	glUniform1i(glGetUniformLocation(program, "particles_nb"), particles_nb);
-	glUniform1f(glGetUniformLocation(program, "gravity"), gravity);
 	glUniform1f(glGetUniformLocation(program, "deltaTime"), deltaTime);
-	glUniform1f(glGetUniformLocation(program, "collision_damping"), collision_dampening);
+
 	glUniform1f(glGetUniformLocation(program, "min_x"), -bounds_x / 2);
 	glUniform1f(glGetUniformLocation(program, "max_x"),  bounds_x / 2);
 	glUniform1f(glGetUniformLocation(program, "min_y"), -bounds_y / 2);
 	glUniform1f(glGetUniformLocation(program, "max_y"),  bounds_y / 2);
 	glUniform1f(glGetUniformLocation(program, "min_z"), -bounds_z / 2);
 	glUniform1f(glGetUniformLocation(program, "max_z"),  bounds_z / 2);
+	glUniformMatrix4fv(glGetUniformLocation(program, "world_to_local"), 1, GL_FALSE, glm::value_ptr(getLocalMatrix()));
+
+	glUniform1f(glGetUniformLocation(program, "gravity"), gravity);
 	glUniform1f(glGetUniformLocation(program, "influence_radius"), particle_influence_radius);
 	glUniform1f(glGetUniformLocation(program, "target_density"), target_density);
+	glUniform1f(glGetUniformLocation(program, "collision_damping"), collision_dampening);
 	glUniform1f(glGetUniformLocation(program, "pressure_multiplier"), pressure_multiplier);
 	glUniform1f(glGetUniformLocation(program, "near_pressure_multiplier"), near_pressure_multiplier);
 }
@@ -119,8 +160,6 @@ static void initializeParticles(int particles_nb) {
 	}
 	initializeParticlePositions(particles_nb);
 }
-
-
 
 void
 edan35::FluidSimulation::run() {
@@ -280,9 +319,12 @@ edan35::FluidSimulation::run() {
 			
 			ImGui::Separator();
 
-			ImGui::SliderFloat("Box width", &bounds_x, 10.0f, 150.0f);
-			ImGui::SliderFloat("Box height", &bounds_y, 10.0f, 100.0f);
-			ImGui::SliderFloat("Box depth", &bounds_z, 10.0f, 100.0f);
+			ImGui::SliderFloat("Box width", &bounds_x, 20.0f, 150.0f);
+			ImGui::SliderFloat("Box height", &bounds_y, 20.0f, 100.0f);
+			ImGui::SliderFloat("Box depth", &bounds_z, 20.0f, 100.0f);
+			ImGui::SliderFloat("Rotation X", &rotation_x, 0.0f, 360.0f);
+			ImGui::SliderFloat("Rotation Y", &rotation_y, 0.0f, 360.0f);
+			ImGui::SliderFloat("Rotation Z", &rotation_z, 0.0f, 360.0f);
 		}
 		ImGui::End();
 		mWindowManager.RenderImGuiFrame(true);
