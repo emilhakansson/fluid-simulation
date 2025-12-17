@@ -159,8 +159,8 @@ vec3 calculatePressureForce(int i) { //ok
 		float nearPressureA = convertNearDensityToNearPressure(nearDensityA);
 		float nearPressureB = convertNearDensityToNearPressure(nearDensityB);
 		float shared_near_pressure = (nearPressureA + nearPressureB) / 2;
-		pressure_force += direction * slope * shared_pressure * mass / densityB;
-		pressure_force += direction * nearDensityKernelDerivative(influence_radius, dist) * shared_near_pressure / densityB;
+		pressure_force += direction * slope * shared_pressure * mass / densityA;
+		pressure_force += direction * nearDensityKernelDerivative(influence_radius, dist) * shared_near_pressure / densityA;
 	}
 	return pressure_force;
 }
@@ -180,12 +180,14 @@ float convertNearDensityToNearPressure(float near_density) {
 	return near_density * near_pressure_multiplier;
 }
 
+float hash(float x) {
+    return fract(sin(x) * 43758.5453123);
+}
+
 vec3 randomDirection() { // ???
-	int seed = int(gl_GlobalInvocationID.x);
-	int x = ((9173733 * seed) << 5 + (62 * seed)) << 4;
-	int y = ((6573 * seed) << 4 + (13 * seed)) << 6;
-	int z = ((3197 * seed) << 3 + (71 * seed)) << 5;
-	return normalize(vec3(x, y, z));
+	float seed = float(gl_GlobalInvocationID.x) + deltaTime * 1000;
+	vec3 v = vec3(hash(seed + 1), hash(seed + 2), hash(seed + 3)) * 2 - 1;
+	return normalize(v);
 }
 
 
@@ -199,7 +201,7 @@ void main() {
 
 	vec3 down = vec3(0, -1, 0);
 	particles[i].velocity += gravity * down * deltaTime;
-	particles[i].predicted_position = particles[i].position + particles[i].velocity / 12.0f;
+	particles[i].predicted_position = particles[i].position + particles[i].velocity / 20.0f;
 	memoryBarrierBuffer();
 	barrier();
 	particles[i].density = calculateDensity(particles[i].predicted_position);

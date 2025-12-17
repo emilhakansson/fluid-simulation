@@ -113,7 +113,7 @@ static void initializeParticlePositions(int particles_nb)
 	}
 }
 
-static void initializeParticles(int particles_nb, float gap) {
+static void initializeParticles(int particles_nb) {
 	for (int i = 0; i < particles_nb; i++) {
 		particles[i] = Particle();
 	}
@@ -162,7 +162,7 @@ edan35::FluidSimulation::run() {
 	glm::vec3 initial_velocity = glm::vec3(0.0f, 0.0f, 0.0f);
 	float radius = 1.0f;
 
-	initializeParticles(particles_nb, 10.0f);
+	initializeParticles(particles_nb);
 
 	// Set up uniforms
 
@@ -252,10 +252,7 @@ edan35::FluidSimulation::run() {
 				glUseProgram(compute_shader);
 				setComputeUniforms(compute_shader);
 				glDispatchCompute(work_groups_nb, 1, 1);
-				if (work_groups_nb > 1) {
-					glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
-				}
-				
+				glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
 			}
 			if (particles_nb_changed) {
 				initializeParticlePositions(particles_nb);
