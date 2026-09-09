@@ -1,0 +1,6 @@
+# Build folder
+out/
+
+# Visual Studio files
+.vs/
+
