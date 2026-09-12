@@ -3,7 +3,7 @@
 struct Particle
 {
 	vec3 position;
-
+	vec3 velocity;
 };
 
 layout(location = 0) in vec3 vertex;

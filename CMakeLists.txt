@@ -28,6 +28,13 @@ add_library(imgui STATIC
     vendor/imgui/backends/imgui_impl_opengl3.cpp
 )
 
+#--- OpenMP ---
+find_package(OpenMP REQUIRED)
+target_link_libraries(fluidsim
+	PUBLIC
+	OpenMP::OpenMP_CXX
+)
+
 target_include_directories(imgui
 	PUBLIC
 	vendor/imgui

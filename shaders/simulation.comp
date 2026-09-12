@@ -1,6 +1,62 @@
 #version 460 core
 
+// Define the work group size (number of "threads") for the compute shader
+layout(local_size_x = 64) in;
+
+uniform float deltaTime;
+uniform float gravity;
+uniform float collisionDamping;
+uniform int nbrParticles;
+
+uniform vec3 bounds;
+
+struct Particle
+{
+	vec3 position;
+	vec3 velocity;
+};
+
+// Shader Storage Buffer Object to hold the Particle data
+layout(std430, binding = 5) buffer SSBO
+{
+	Particle particles[];
+};
+
+void resolveCollisions()
+{
+	uint id = gl_GlobalInvocationID.x;
+	float x = particles[id].position.x;
+	float y = particles[id].position.y;
+	float z = particles[id].position.z;
+	bool hit = false;
+
+	if (abs(x) > bounds.x / 2)
+	{
+		particles[id].position.x = sign(x) * bounds.x / 2;
+		particles[id].velocity.x *= -1;
+		hit = true;
+	}
+	if (abs(y) > bounds.y / 2)
+	{
+		particles[id].position.y = sign(y) * bounds.y / 2;
+		particles[id].velocity.y *= -1;
+		hit = true;
+	}
+	if (abs(z) > bounds.z / 2)
+	{
+		particles[id].position.z = sign(z) * bounds.z / 2;
+		particles[id].velocity *= -1;
+		hit = true;
+	}
+	if (hit) particles[id].velocity *= (1 - collisionDamping);
+
+	particles[id].velocity.y -= gravity * deltaTime; // 0.016666668;
+	particles[id].position += particles[id].velocity * deltaTime; // 0.01666668;
+
+}
+
 void main()
 {
-	
+	if (gl_GlobalInvocationID.x > nbrParticles) return;
+	resolveCollisions();
 }

@@ -19,18 +19,23 @@ enum class ShaderType { Vertex, Fragment, Compute };
 using ShaderData = std::map<ShaderType, const char*>;
 static const string SHADER_PATH{ "../../../shaders/" };
 
-class ShaderProgram
+class Shader
 {
 public:
-	ShaderProgram(const ShaderData& data) : _setUniforms{ [](GLenum program) {} }
+	Shader(const char* vertexFilename, const char* fragmentFilename) : _setUniforms{ [](GLenum program) {} }
 	{
+		isCompute = false;
 		shaderProgram = glCreateProgram();
-		for (const auto& [type, filename] : data)
-		{
-			GLuint shader = createShader(type, filename);
-			glAttachShader(shaderProgram, shader);
-			glDeleteShader(shader);
-		}
+		createAndAttachShader(ShaderType::Vertex, vertexFilename);
+		createAndAttachShader(ShaderType::Fragment, fragmentFilename);
+		link(shaderProgram);
+	}
+
+	Shader(const char* computeFilename) : _setUniforms{ [](GLenum program) {} }
+	{
+		isCompute = true;
+		shaderProgram = glCreateProgram();
+		createAndAttachShader(ShaderType::Compute, computeFilename);
 		link(shaderProgram);
 	}
 
@@ -40,12 +45,20 @@ public:
 		_setUniforms(shaderProgram);
 	}
 
-	void setUniforms(const std::function<void(GLuint)>& setUniforms)
+	void dispatch(unsigned int nbrGroupsX, unsigned int nbrGroupsY = 1, unsigned int nbrGroupsZ = 1)
+	{
+		assert(isCompute && "Shader must be of type Compute");
+		use();
+		glDispatchCompute(nbrGroupsX, nbrGroupsY, nbrGroupsZ);
+
+	}
+
+	void setUniforms(const std::function<void(GLuint)> const & setUniforms)
 	{
 		_setUniforms = setUniforms;
 	}
 
-	GLuint getId()
+	GLuint getId() const
 	{
 		return shaderProgram;
 	}
@@ -53,6 +66,33 @@ public:
 private:
 	GLuint shaderProgram;
 	std::function<void(GLuint)> _setUniforms;
+	bool isCompute;
+
+	void createAndAttachShader(ShaderType type, const char* filename)
+	{
+		GLuint vertexShader = createShader(type, filename);
+		glAttachShader(shaderProgram, vertexShader);
+		glDeleteShader(vertexShader);
+	}
+
+	GLuint createShader(ShaderType type, const char* filename)
+	{
+		string source = getShaderSource(filename);
+		const char* src = source.c_str();
+		GLuint shader = [&]()
+			{
+				switch (type)
+				{
+				case ShaderType::Vertex: return glCreateShader(GL_VERTEX_SHADER);
+				case ShaderType::Fragment: return glCreateShader(GL_FRAGMENT_SHADER);
+				case ShaderType::Compute: return glCreateShader(GL_COMPUTE_SHADER);
+				}
+			}();
+
+		glShaderSource(shader, 1, &src, NULL);
+		compile(shader, type);
+		return shader;
+	}
 
 	string getShaderSource(const char* filename)
 	{
@@ -78,7 +118,7 @@ private:
 		}
 	}
 
-	void link(GLuint program)
+	void link(GLuint program) const
 	{
 		glLinkProgram(shaderProgram);
 		int linked;
@@ -90,25 +130,6 @@ private:
 			std::cout << "ERROR: Shader program linking failed." << std::endl
 				<< infoLog << std::endl;
 		}
-	}
-
-	GLuint createShader(ShaderType type, const char* filename)
-	{
-		string source = getShaderSource(filename);
-		const char* src = source.c_str();
-		GLuint shader = [&]()
-			{
-				switch (type)
-				{
-				case ShaderType::Vertex: return glCreateShader(GL_VERTEX_SHADER);
-				case ShaderType::Fragment: return glCreateShader(GL_FRAGMENT_SHADER);
-				case ShaderType::Compute: return glCreateShader(GL_COMPUTE_SHADER);
-				}
-			}();
-
-		glShaderSource(shader, 1, &src, NULL);
-		compile(shader, type);
-		return shader;
 	}
 };
 

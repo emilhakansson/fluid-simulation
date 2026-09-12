@@ -11,6 +11,8 @@ struct Particle
 {
 	vec3 position;
 	float pad1;
+	vec3 velocity;
+	float pad2;
 };
 
 #endif

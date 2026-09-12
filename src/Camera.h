@@ -87,6 +87,11 @@ public:
 		view = rotation * glm::translate(view, -dir * (sprinting ? sprintMultiplier : 1.0f) * moveSpeed * dt);
 	}
 
+	void setTranslation(vec3 position)
+	{
+		view[3] = vec4(position, 1);
+	}
+
 private:
 	mat4 view;
 	mat4 projection;

@@ -44,14 +44,14 @@ public:
 		);
 	}
 
-	static Mesh quad(float size)
+	static Mesh quad(float size = 1.0f)
 	{
 		auto vertices = std::vector<vec3>
 		{
-			vec3(0.0f, size, 0.0f),
-			vec3(size, size, 0.0f),
-			vec3(0.0f, 0.0f, 0.0f),
-			vec3(size, 0.0f, 0.0f)
+			vec3(-size / 2,  size / 2, 0.0f),
+			vec3( size / 2,  size / 2, 0.0f),
+			vec3(-size / 2, -size / 2, 0.0f),
+			vec3( size / 2, -size / 2, 0.0f)
 		};
 
 		auto indices = std::vector<unsigned int>
@@ -113,21 +113,21 @@ public:
 		return Mesh(vertices, indices);
 	}
 
-	static Mesh cubeWireframe(float width, float length, float height)
+	static Mesh cubeWireframe(float width = 1.0f, float length = 1.0f, float height = 1.0f)
 	{
 		auto vertices = std::vector<vec3>
 		{
 			// Bottom vertices
-			vec3(    0,      0, 0),
-			vec3(width,      0, 0),
-			vec3(    0, length, 0),
-			vec3(width, length, 0),
+			vec3(-width / 2, -length / 2, -height / 2),
+			vec3( width / 2,     -length / 2, -height / 2),
+			vec3(-width / 2,  length / 2, -height / 2),
+			vec3( width / 2,  length / 2, -height / 2),
 
 			// Top vertices
-			vec3(    0,      0, height),
-			vec3(width,      0, height),
-			vec3(    0, length, height),
-			vec3(width, length, height),
+			vec3(-width / 2, -length / 2, height / 2),
+			vec3( width / 2, -length / 2, height / 2),
+			vec3(-width / 2,  length / 2, height / 2),
+			vec3( width / 2,  length / 2, height / 2),
 		};
 
 		auto indices = std::vector<unsigned int>

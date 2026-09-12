@@ -9,9 +9,9 @@ in vec3 vPos;
 
 void main()
 {
-	if (length(vPos * 2 - 1) > 1.4)
+	if (length(vPos * 2) > 1)
 	{
 		discard;
 	}
-	fragColor = vec4(vPos, 1);
+	fragColor = vec4(vPos + vec3(0.5), 1);
 }
