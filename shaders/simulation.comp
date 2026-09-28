@@ -1,19 +1,31 @@
 #version 460 core
 
 // Define the work group size (number of "threads") for the compute shader
-layout(local_size_x = 64) in;
+layout(local_size_x = 128) in;
 
+uniform int computeIndex;
+
+uniform bool paused;
 uniform float deltaTime;
 uniform float gravity;
 uniform float collisionDamping;
+
 uniform int nbrParticles;
 
+// Fluid parameters
+uniform float targetDensity;
+uniform float pressureMultiplier;
+uniform float influenceRadius;
 uniform vec3 bounds;
+
+float PI = 3.14159;
+
 
 struct Particle
 {
 	vec3 position;
 	vec3 velocity;
+	float density;
 };
 
 // Shader Storage Buffer Object to hold the Particle data
@@ -21,6 +33,74 @@ layout(std430, binding = 5) buffer SSBO
 {
 	Particle particles[];
 };
+
+vec3 randomDirection()
+{
+	float r = fract(gl_GlobalInvocationID.x + deltaTime);
+	vec3 v = vec3(sin(r * 31), sin(r * 73), sin(r));
+	return normalize(v);
+}
+
+float kSpiky = 15/(PI * pow(influenceRadius, 6));
+float kernelSpiky(float dist)
+{
+	float q = influenceRadius - dist;
+	if (dist > influenceRadius) return 0;
+	return pow(q, 3);
+}
+
+float kernelSpikyDerivative(float dist)
+{
+	float q = influenceRadius - dist;
+	if (dist > influenceRadius) return 0;
+	return -3 * pow(q, 2);
+}
+
+float smoothingKernel(float dist)
+{
+	return kernelSpiky(dist);
+}
+
+float smoothingKernelDerivative(float dist)
+{
+	return kernelSpikyDerivative(dist);
+}
+
+float density(vec3 pos)
+{
+	float density = 0;
+	for (int i = 0; i < nbrParticles; i++)
+	{
+		float dist = distance(particles[i].position, pos);
+		density += smoothingKernel(dist);
+	}
+	return kSpiky * density;
+}
+
+float densityToPressure(float density)
+{
+	return (density - targetDensity) * pressureMultiplier;
+}
+
+vec3 pressureForce(int i)
+{
+	vec3 pressure = vec3(0.0);
+
+	for (int j = 0; j < nbrParticles; j++)
+	{
+		if (i == j) continue;
+
+		vec3 offset = particles[j].position - particles[i].position;
+		float dist = length(offset);
+		vec3 direction = dist == 0 ? randomDirection() : offset / dist;
+
+		float slope = smoothingKernelDerivative(dist);
+		float averageDensity = (particles[i].density + particles[j].density) / 2;
+		float sharedPressure = densityToPressure(averageDensity);
+		pressure += kSpiky * direction * slope * sharedPressure / particles[j].density;
+	}
+	return pressure;
+}
 
 void resolveCollisions()
 {
@@ -33,30 +113,46 @@ void resolveCollisions()
 	if (abs(x) > bounds.x / 2)
 	{
 		particles[id].position.x = sign(x) * bounds.x / 2;
-		particles[id].velocity.x *= -1;
-		hit = true;
+		particles[id].velocity.x *= (1 - collisionDamping);
 	}
 	if (abs(y) > bounds.y / 2)
 	{
 		particles[id].position.y = sign(y) * bounds.y / 2;
-		particles[id].velocity.y *= -1;
-		hit = true;
+		particles[id].velocity.y *= (1 - collisionDamping);
 	}
 	if (abs(z) > bounds.z / 2)
 	{
 		particles[id].position.z = sign(z) * bounds.z / 2;
-		particles[id].velocity *= -1;
-		hit = true;
+		particles[id].velocity.z *= (1 - collisionDamping);
 	}
-	if (hit) particles[id].velocity *= (1 - collisionDamping);
-
-	particles[id].velocity.y -= gravity * deltaTime; // 0.016666668;
-	particles[id].position += particles[id].velocity * deltaTime; // 0.01666668;
-
 }
+
+
+
 
 void main()
 {
-	if (gl_GlobalInvocationID.x > nbrParticles) return;
-	resolveCollisions();
+	int id = int(gl_GlobalInvocationID.x);
+	if (id > nbrParticles) return;
+	if (!paused)
+	{
+		switch(computeIndex)
+		{
+		case 0: 
+			resolveCollisions();
+			break;
+		case 1:
+			particles[id].density = density(particles[id].position);
+			break;
+		case 2:
+			particles[id].velocity *= (1 - deltaTime);
+			particles[id].velocity.y -= gravity * deltaTime; // 0.016666668;
+			vec3 acceleration = pressureForce(id) / particles[id].density;
+			particles[id].velocity += acceleration * deltaTime;
+			break;
+		case 3:
+			particles[id].position += particles[id].velocity * deltaTime; // 0.01666668;
+			break;
+		}
+	}
 }

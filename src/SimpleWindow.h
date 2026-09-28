@@ -25,6 +25,8 @@ public:
 			throw std::exception("Failed to create GLFW window");
 		}
 		glfwMakeContextCurrent(window);
+		//std::printf("OpenGl version: %s\n", glGetString(GL_VERSION));
+		//std::printf("GLSL version: %s\n", glGetString(GL_SHADING_LANGUAGE_VERSION));
 
 		if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
 		{

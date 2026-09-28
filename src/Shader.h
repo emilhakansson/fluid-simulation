@@ -45,10 +45,11 @@ public:
 		_setUniforms(shaderProgram);
 	}
 
-	void dispatch(unsigned int nbrGroupsX, unsigned int nbrGroupsY = 1, unsigned int nbrGroupsZ = 1)
+	void dispatch(unsigned int nbrGroupsX, unsigned int nbrGroupsY = 1, unsigned int nbrGroupsZ = 1, int index = 0)
 	{
 		assert(isCompute && "Shader must be of type Compute");
 		use();
+		glUniform1i(glGetUniformLocation(shaderProgram, "computeIndex"), index);
 		glDispatchCompute(nbrGroupsX, nbrGroupsY, nbrGroupsZ);
 
 	}
@@ -70,9 +71,9 @@ private:
 
 	void createAndAttachShader(ShaderType type, const char* filename)
 	{
-		GLuint vertexShader = createShader(type, filename);
-		glAttachShader(shaderProgram, vertexShader);
-		glDeleteShader(vertexShader);
+		GLuint shader = createShader(type, filename);
+		glAttachShader(shaderProgram, shader);
+		glDeleteShader(shader);
 	}
 
 	GLuint createShader(ShaderType type, const char* filename)
@@ -113,7 +114,10 @@ private:
 		{
 			char infoLog[512];
 			glGetShaderInfoLog(shader, 512, NULL, infoLog);
-			std::cout << "ERROR: " << (type == ShaderType::Vertex ? "Vertex" : "Fragment") << " shader compilation failed." << std::endl
+			std::cout << "ERROR: " << 
+				(type == ShaderType::Vertex ? "Vertex" : 
+				 type == ShaderType::Fragment ? "Fragment" : "Compute") 
+				<< " shader compilation failed." << std::endl
 				<< infoLog << std::endl;
 		}
 	}
