@@ -52,7 +52,11 @@ int main()
 	float pressureMultiplier = 300.0f;
 	float particleScale = 1.0f;
 
+	// Box controls
 	bool hideBox = false;
+	float rotationX = 0.0f;
+	float rotationY = 0.0f;
+	float rotationZ = 0.0f;
 
 	SimpleWindow window = SimpleWindow(1600, 900, "Hello window");
 	InputHandler input = InputHandler(window);
@@ -120,6 +124,9 @@ int main()
 		camera.update(deltaTime, input);
 
 		// --- Physics ---
+		box.setRotationX(rotationX);
+		box.setRotationY(rotationY);
+		box.setRotationZ(rotationZ);
 		if (prevNbrParticles != nbrParticles)
 		{
 			nbrParticles = std::min(nbrParticles, maxParticles);
@@ -165,9 +172,13 @@ int main()
 			
 			ImGui::Text("Box bounds");
 			ImGui::Checkbox("Hide", &hideBox);
-			ImGui::SliderFloat("X", &bounds.x, 10.0f, 100.0f);
-			ImGui::SliderFloat("Y", &bounds.y, 10.0f, 100.0f);
-			ImGui::SliderFloat("Z", &bounds.z, 10.0f, 100.0f);
+			ImGui::SliderFloat("Width", &bounds.x, 10.0f, 100.0f);
+			ImGui::SliderFloat("Height", &bounds.y, 10.0f, 100.0f);
+			ImGui::SliderFloat("Length", &bounds.z, 10.0f, 100.0f);
+			ImGui::Text("Box rotation");
+			ImGui::SliderFloat("X", &rotationX, 0.0f, 6.28f);
+			ImGui::SliderFloat("Y", &rotationY, 0.0f, 6.28f);
+			ImGui::SliderFloat("Z", &rotationZ, 0.0f, 6.28f);
 
 			ImGui::Separator();
 			

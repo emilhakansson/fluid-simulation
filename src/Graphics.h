@@ -39,17 +39,56 @@ public:
 		scale = _scale;
 	}
 
+	void setRotationX(float theta)
+	{
+		float sin_t = glm::sin(theta);
+		float cos_t = glm::cos(theta);
+		rotationX = mat3
+		(
+			1,      0,     0,
+			0,  cos_t, sin_t,
+			0, -sin_t, cos_t
+		);
+	}
+
+	void setRotationY(float theta)
+	{
+		float sin_t = glm::sin(theta);
+		float cos_t = glm::cos(theta);
+		rotationY = mat3
+		(
+			 cos_t, 0, sin_t,
+			     0, 1,     0,
+			-sin_t, 0, cos_t
+		);
+	}
+
+	void setRotationZ(float theta)
+	{
+		float sin_t = glm::sin(theta);
+		float cos_t = glm::cos(theta);
+		rotationZ = mat3
+		(
+			 cos_t, sin_t, 0,
+			-sin_t, cos_t, 0,
+			     0,     0, 1
+		);
+	}
+
 private:
 	Mesh mesh;
 	Shader shader;
 
 	vec3 scale{ vec3(1.0f) };
 	vec3 translation{ vec3(0.0f) };
-	mat3 rotation{ mat3(1.0f) };
+	mat3 rotationX{ mat3(1.0f) };
+	mat3 rotationY{ mat3(1.0f) };
+	mat3 rotationZ{ mat3(1.0f) };
 
 	mat4 modelMatrix() const
 	{
-		return glm::mat4
+		mat4 rotation = glm::mat4(rotationZ * rotationY * rotationX);
+		return rotation * glm::mat4
 		   (      scale.x,             0,             0, 0,
 			            0,       scale.y,             0, 0,
 			            0,             0,       scale.z, 0,
