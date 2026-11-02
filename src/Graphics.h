@@ -75,6 +75,25 @@ public:
 		);
 	}
 
+	mat4 modelMatrix() const
+	{
+		mat4 translationM = mat4
+		   (            1,             0,             0, 0,
+			            0,             1,             0, 0,
+			            0,             0,             1, 0,
+			translation.x, translation.y, translation.z, 1);
+
+		mat4 rotationM = mat4(rotationZ * rotationY * rotationX);
+
+		mat4 scaleM = mat4
+		(scale.x,       0,       0, 0,
+			   0, scale.y,       0, 0,
+			   0,       0, scale.z, 0,
+			   0,       0,       0, 1);
+
+		return translationM * rotationM * scaleM;
+	}
+
 private:
 	Mesh mesh;
 	Shader shader;
@@ -85,15 +104,7 @@ private:
 	mat3 rotationY{ mat3(1.0f) };
 	mat3 rotationZ{ mat3(1.0f) };
 
-	mat4 modelMatrix() const
-	{
-		mat4 rotation = glm::mat4(rotationZ * rotationY * rotationX);
-		return rotation * glm::mat4
-		   (      scale.x,             0,             0, 0,
-			            0,       scale.y,             0, 0,
-			            0,             0,       scale.z, 0,
-			translation.x, translation.y, translation.z, 1);
-	}
+
 };
 
 #endif

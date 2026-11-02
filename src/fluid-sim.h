@@ -9,12 +9,12 @@ namespace Compute
 	int Position = 3;
 };
 
-static std::vector<Particle> initializeParticles(int nbrParticles);
-
 static float random(float min, float max)
 {
 	return min + static_cast<float>(rand() / static_cast<float>(RAND_MAX / (max - min)));
 }
+
+static std::vector<Particle> initializeParticles(int nbrParticles, float spacing);
 
 template <typename T>
 static GLuint createSSBO(int binding, const std::vector<T>& list, int capacity)
@@ -33,4 +33,13 @@ static GLuint createSSBO(int binding, const std::vector<T>& list)
 	return createSSBO(binding, list, list.size());
 }
 
+template <typename T>
+static void uploadToSSBO(int binding, const std::vector<T>& list, int maxSize)
+{
+	glBindBuffer(GL_SHADER_STORAGE_BUFFER, binding);
+	glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(T) * maxSize, list.data(), GL_DYNAMIC_DRAW);
+}
+
 #endif
+
+void dispatchCompute(Shader& computeShader, int nbrParticles);

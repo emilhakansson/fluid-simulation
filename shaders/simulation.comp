@@ -5,7 +5,6 @@ layout(local_size_x = 128) in;
 
 uniform int computeIndex;
 
-uniform bool paused;
 uniform float deltaTime;
 uniform float gravity;
 uniform float collisionDamping;
@@ -18,12 +17,16 @@ uniform float pressureMultiplier;
 uniform float influenceRadius;
 uniform vec3 bounds;
 
+uniform mat4 worldToLocal;
+uniform mat4 localToWorld;
+
 float PI = 3.14159;
 
 
 struct Particle
 {
 	vec3 position;
+	//vec3 predictedPosition;
 	vec3 velocity;
 	float density;
 };
@@ -105,26 +108,48 @@ vec3 pressureForce(int i)
 void resolveCollisions()
 {
 	uint id = gl_GlobalInvocationID.x;
-	float x = particles[id].position.x;
-	float y = particles[id].position.y;
-	float z = particles[id].position.z;
-	bool hit = false;
+	vec3 localPos = vec4(particles[id].position, 1).xyz;
+	vec3 localVel =vec4(particles[id].velocity, 0).xyz;
 
-	if (abs(x) > bounds.x / 2)
+	bool hit = false;
+	if (abs(localPos.x) >= bounds.x / 2)
 	{
-		particles[id].position.x = sign(x) * bounds.x / 2;
-		particles[id].velocity.x *= (1 - collisionDamping);
+		localPos.x = sign(localPos.x) * bounds.x / 2;
+		if (localPos.x * localVel.x > 0)
+		{
+			localVel.x *= -1;
+			hit = true;
+		}
 	}
-	if (abs(y) > bounds.y / 2)
+	if (abs(localPos.y) >= bounds.y / 2)
 	{
-		particles[id].position.y = sign(y) * bounds.y / 2;
-		particles[id].velocity.y *= (1 - collisionDamping);
+		localPos.y = sign(localPos.y) * bounds.y / 2;
+		if (localPos.y * localVel.y > 0)
+		{
+			localVel.y *= -1;
+			hit = true;
+		}
 	}
-	if (abs(z) > bounds.z / 2)
+	if (abs(localPos.z) >= bounds.z / 2)
 	{
-		particles[id].position.z = sign(z) * bounds.z / 2;
-		particles[id].velocity.z *= (1 - collisionDamping);
+		localPos.z = sign(localPos.z) * bounds.z / 2;
+		if (localPos.z * localVel.z > 0)
+		{
+			localVel.z *= -1;
+			hit = true;
+		}
 	}
+
+	if (hit)
+	{
+		localVel *= (1 - collisionDamping);
+	}
+
+	vec3 pos = vec4(localPos, 1).xyz;
+	vec3 vel =vec4(localVel, 0).xyz;
+
+	particles[id].position = pos;
+	particles[id].velocity = vel;
 }
 
 
@@ -134,25 +159,22 @@ void main()
 {
 	int id = int(gl_GlobalInvocationID.x);
 	if (id > nbrParticles) return;
-	if (!paused)
+	switch(computeIndex)
 	{
-		switch(computeIndex)
-		{
-		case 0: 
-			resolveCollisions();
-			break;
-		case 1:
-			particles[id].density = density(particles[id].position);
-			break;
-		case 2:
-			particles[id].velocity *= (1 - deltaTime);
-			particles[id].velocity.y -= gravity * deltaTime; // 0.016666668;
-			vec3 acceleration = pressureForce(id) / particles[id].density;
-			particles[id].velocity += acceleration * deltaTime;
-			break;
-		case 3:
-			particles[id].position += particles[id].velocity * deltaTime; // 0.01666668;
-			break;
-		}
+	case 0: 
+		resolveCollisions();
+		break;
+	case 1:
+		particles[id].density = density(particles[id].position);
+		break;
+	case 2:
+		particles[id].velocity *= (1 - deltaTime);
+		particles[id].velocity.y -= gravity * deltaTime; // 0.016666668;
+		vec3 acceleration = pressureForce(id) / particles[id].density;
+		particles[id].velocity += acceleration * deltaTime;
+		break;
+	case 3:
+		particles[id].position += particles[id].velocity * deltaTime; // 0.01666668;
+		break;
 	}
 }
